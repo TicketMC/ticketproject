@@ -1,4 +1,5 @@
 # Importar dependencias
+from enum import Enum
 import psycopg2
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -29,6 +30,11 @@ class User(BaseModel):
     email: str
     rol: str
     is_active: bool
+    
+# Definir los posibles valores del rol
+class Role(str, Enum):
+    user = "user"
+    admin = "admin"    
 
 class Token(BaseModel):
     access_token: str
@@ -99,7 +105,7 @@ def register_user(user: UserCreate):
     # Insertar el nuevo usuario en la base de datos
     try:
         cursor.execute(
-            "INSERT INTO users (email, password) VALUES (%s, %s) RETURNING id, email, is_active;",
+            "INSERT INTO users (email, password, rol) VALUES (%s, %s, 'user') RETURNING id, email, rol, is_active;",
             (user.email, hashed_password)
         )
         new_user = cursor.fetchone()
@@ -110,7 +116,8 @@ def register_user(user: UserCreate):
     finally:
         cerrar_bd(conexion)
 
-    return {"id": new_user[0], "email": new_user[1], "is_active": new_user[2]}
+    return {"id": new_user[0], "email": new_user[1], "rol":new_user[2], "is_active": new_user[3]}
+
 
 # ♥-♣-♠-♦ Ruta de inicio de sesión generando un token
 @router.post("/token", response_model=Token)
@@ -174,7 +181,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 @router.post("/login/", response_model=User)
-def loggin(token: Token): 
+def login(token: Token): 
     user = get_current_user(token.access_token)
     print(user["id"])
     return { "id": user["id"], "email": user["email"], "rol": user["rol"], "is_active": user["is_active"]}

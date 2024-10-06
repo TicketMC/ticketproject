@@ -34,18 +34,12 @@ class Ticket(BaseModel):
     title: str
     description: str
     status: str
-    category: str
     priority: str
 
 # Enums para definir los valores permitidos en los campos de tickets
 class Status(str, Enum):
     abierto = "abierto"
     cerrado = "cerrado"
-
-class Category(str, Enum):
-    network = "network"
-    software = "software"
-    hardware = "hardware"
 
 class Priority(str, Enum):
     baja = "baja"
@@ -55,10 +49,10 @@ class Priority(str, Enum):
 # Modelo de entrada para crear un ticket con validaciones en los campos
 class Ticket_create(BaseModel):
     Ticket_id: int
+    user_id: int
     title: str = Field(min_length=5, max_length=25)
     description: str = Field(min_length=5, max_length=50)
     status: Status
-    category: Category
     priority: Priority
     created_at: datetime = None
     updated_at: datetime = None    
@@ -95,11 +89,11 @@ def create_ticket(ticket: Ticket_create):
     conexion = conectar_bd()
     cursor = conexion.cursor()
     query = """
-    INSERT INTO tickets (user_id, title, description, status, category, priority, created_at, updated_at)
-    VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW()) RETURNING *;
+    INSERT INTO tickets (user_id, title, description, status, priority, created_at, updated_at)
+    VALUES (%s, %s, %s, %s, %s, NOW(), NOW()) RETURNING *;
     """
     cursor.execute(query, (
-        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.category, ticket.priority
+        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.priority
     ))
     new_ticket = cursor.fetchone()
     conexion.commit()
@@ -122,12 +116,13 @@ def get_tickets(token: Annotated[str | None, Header()] = None):
     # Decodificar el token JWT para obtener el rol del usuario
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     rol: str = payload.get("rol")
+    user_id: str = payload.get("id")
     
     conexion = conectar_bd()
     cursor = conexion.cursor()
     sql = "SELECT * FROM tickets;"
     if rol == "user": 
-        sql = "SELECT * FROM tickets WHERE user_id = 1"
+        sql = f"SELECT * FROM tickets WHERE user_id = {user_id}"
     cursor.execute(sql)
     Ticket = cursor.fetchall() 
     cursor.close()
@@ -163,13 +158,13 @@ def update_ticket(ticket_id: int, ticket: Ticket):
     cursor = conexion.cursor()
 
     query = """
-    UPDATE ticket
-    SET user_id = %s, title = %s, description = %s, status = %s, category = %s, priority = %s, updated_at = NOW()
+    UPDATE tickets
+    SET user_id = %s, title = %s, description = %s, status = %s, priority = %s, updated_at = NOW()
     WHERE id = %s RETURNING *;
     """
 
     cursor.execute(query, (
-        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.category, ticket.priority, ticket_id
+        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.priority, ticket_id
     ))
     update_ticket = cursor.fetchone()
     conexion.commit()
