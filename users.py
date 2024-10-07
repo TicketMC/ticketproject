@@ -1,13 +1,13 @@
 from datetime import datetime
+from enum import Enum
 import os
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated, List
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 import psycopg2
+from jose import jwt
 from pydantic import BaseModel
-from auth import User, UserCreate, conectar_bd, get_current_user, get_password_hash
+from auth import ALGORITHM, SECRET_KEY, User, UserCreate, conectar_bd, get_current_user, get_password_hash
 
-
-router = APIRouter()
 profile_router = APIRouter()
 
 # Conexión a la base de datos PostgreSQL
@@ -24,52 +24,59 @@ def cerrar_bd(conexion):
     conexion.close()
 
 #-------------------------------PROFILES---------------------------->
-""""CREATE TABLE profiles (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id),
-    name VARCHAR(50),
-    lastname VARCHAR(50),
-    cellphone VARCHAR(15),
-    created TIMESTAMP DEFAULT NOW(),
-    updated TIMESTAMP DEFAULT NOW()
-);"""
 
-class ProfileCreate(BaseModel):
-    user_id: int
-    name: str
-    lastname: str
-    cellphone: str
+class ProfileUpdate(BaseModel):
+    id: int
+    names: str
+    lastnames: str
+    phone: str
+
+class Rol (str, Enum):
+    user = "user"
+    admin = "admin"
 
 class Profile(BaseModel):
     id: int
-    user_id: int
-    name: str
-    lastname: str
-    cellphone: str
-    created: datetime
-    updated: datetime
+    email: str
+    names: str
+    lastnames: str
+    rol: Rol
+    phone: str
+    created_at: datetime
+    updated_at: datetime
     
-@profile_router.post("/profiles/", response_model=Profile, tags=["profiles"])
-def create_profile(profile: ProfileCreate):
+# ♣-♥ Get users from roles
+@profile_router.get('/users/', tags=["Profiles"])
+def get_all_users(token: Annotated[str | None, Header()] = None):
+    
+    if token is None:
+            raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usted no se encuentra autorizado",
+            headers={"auth": "Bearer"}, # se contesta como consideres el error
+        )
+    # Decodificar el token JWT para obtener el rol del usuario
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    rol: str = payload.get("rol")
+    id: str = payload.get("id")
+    
     conexion = conectar_bd()
     cursor = conexion.cursor()
-    query = """
-    INSERT INTO profiles (user_id, name, lastname, cellphone, created, updated)
-    VALUES (%s, %s, %s, %s, NOW(), NOW()) RETURNING *;
-    """
-    cursor.execute(query, (profile.user_id, profile.name, profile.lastname, profile.cellphone))
-    new_profile = cursor.fetchone()
-    conexion.commit()
+    sql = "SELECT * FROM users;"
+    if rol == "user": 
+        sql = f"SELECT * FROM users WHERE id = {id}"
+    cursor.execute(sql)
+    users = cursor.fetchall() 
     cursor.close()
     conexion.close()
-    return dict(zip([desc[0] for desc in cursor.description], new_profile))
+    return [dict(zip([desc[0] for desc in cursor.description], user)) for user in users]
 
-@profile_router.get("/profiles/{user_id}", response_model=Profile, tags=["profiles"])
-def get_profile(user_id: int):
+@profile_router.get("/profiles/{id}", response_model=Profile, tags=["Profiles"])
+def get_profile(id: int):
     conexion = conectar_bd()
     cursor = conexion.cursor()
-    query = "SELECT * FROM profiles WHERE user_id = %s;"
-    cursor.execute(query, (user_id,))
+    query = "SELECT * FROM users WHERE id = %s;"
+    cursor.execute(query, (id,))
     profile = cursor.fetchone()
     cursor.close()
     conexion.close()
@@ -79,16 +86,16 @@ def get_profile(user_id: int):
     
     return dict(zip([desc[0] for desc in cursor.description], profile))
 
-@profile_router.put("/profiles/{user_id}", response_model=Profile, tags=["profiles"])
-def update_profile(user_id: int, profile: ProfileCreate):
+@profile_router.put("/profiles/{id}", response_model=Profile, tags=["Profiles"])
+def update_profile(id: int, profile: ProfileUpdate):
     conexion = conectar_bd()
     cursor = conexion.cursor()
     query = """
-    UPDATE profiles
-    SET name = %s, lastname = %s, cellphone = %s, updated = NOW()
-    WHERE user_id = %s RETURNING *;
+    UPDATE users
+    SET names = %s, lastnames = %s, phone = %s, updated_at = NOW()
+    WHERE id = %s RETURNING *;
     """
-    cursor.execute(query, (profile.name, profile.lastname, profile.cellphone, user_id))
+    cursor.execute(query, (profile.names, profile.lastnames, profile.phone, id))
     updated_profile = cursor.fetchone()
     conexion.commit()
     cursor.close()

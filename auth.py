@@ -2,7 +2,7 @@
 from enum import Enum
 import psycopg2
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -190,3 +190,33 @@ def login(token: Token):
 def manualphash(password: str):
     hashed_password = get_password_hash(password)
     return {"hashed_password": hashed_password}
+
+
+def verificar_rol(roles_permitidos: list):
+    def rol_dependency(token: str = Header(None)):
+        if token is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No autorizado, token no proporcionado",
+            )
+
+        try:
+            # Decodificar el token JWT
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            rol = payload.get("rol")
+
+            if rol not in roles_permitidos:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permiso para acceder a este recurso"
+                )
+
+            return payload  # Retornamos el payload para reutilizarlo si es necesario (ej. obtener el user_id)
+        
+        except jwt.JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Token inválido"
+            )
+    
+    return rol_dependency

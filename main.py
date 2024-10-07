@@ -1,11 +1,11 @@
 # Importar dependencias
-from fastapi import FastAPI, HTTPException, Header, status
+from fastapi import Depends, FastAPI, HTTPException, Header, status
 from fastapi.responses import HTMLResponse
 from typing import Annotated
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
-from auth import router, SECRET_KEY, ALGORITHM
+from auth import router, SECRET_KEY, ALGORITHM, verificar_rol
 from users import profile_router
 from jose import jwt
 from enum import Enum
@@ -41,6 +41,7 @@ class Ticket(BaseModel):
 # Enums para definir los valores permitidos en los campos de tickets
 class Status(str, Enum):
     abierto = "abierto"
+    proceso = "proceso"
     cerrado = "cerrado"
 
 class Priority(str, Enum):
@@ -50,7 +51,7 @@ class Priority(str, Enum):
 
 # Modelo de entrada para crear un ticket con validaciones en los campos
 class Ticket_create(BaseModel):
-    Ticket_id: int
+    ticket_id: int
     user_id: int
     title: str = Field(min_length=5, max_length=25)
     description: str = Field(min_length=5, max_length=50)
@@ -58,6 +59,29 @@ class Ticket_create(BaseModel):
     priority: Priority
     created_at: datetime = None
     updated_at: datetime = None    
+    
+class TicketSolution(BaseModel):
+    id: int
+    tech_id: int
+    user_id: int
+    title: str
+    description: str
+    status: Status
+    priority: Priority
+    title_solution: str
+    date_solution: datetime
+    tech_description: str
+    category: str
+    
+class TicketSolutionUpdate(BaseModel):
+    id: int
+    tech_id: int
+    status: Status
+    priority: Priority
+    title_solution: str
+    date_solution: datetime
+    tech_description: str
+    category: str
 
 """
 CREATE TABLE tickets (
@@ -86,8 +110,8 @@ def cerrar_bd(conexion):
     conexion.close()
 
 # ♣-♥-♦ CREATE - POST # Endpoint para crear un nuevo ticket
-@app.post('/ticket/', response_model=Ticket, tags=["Ticket"], description="Create a new ticket")
-def create_ticket(ticket: Ticket_create):
+@app.post('/ticket/', response_model=Ticket, tags=["Tickets"], description="Create a new ticket")
+def create_ticket(ticket: Ticket_create, payload: dict = Depends(verificar_rol(["user"]))):
     conexion = conectar_bd()
     cursor = conexion.cursor()
     query = """
@@ -101,13 +125,13 @@ def create_ticket(ticket: Ticket_create):
     conexion.commit()
     cursor.close()
     conexion.close()
-    # Retornar todos los tickets como una lista de diccionarios
     return dict(zip([desc[0] for desc in cursor.description], new_ticket))
+
 
 # doc, url, sql, front
 # ♣-♥-♦ READ - GET # Endpoint para obtener todos los tickets (solo usuarios autorizados)
-@app.get('/ticket/', tags=["Ticket"])
-def get_tickets(token: Annotated[str | None, Header()] = None):
+@app.get('/ticket/', tags=["Tickets"])
+def get_all_tickets(token: Annotated[str | None, Header()] = None):
     
     if token is None:
             raise HTTPException(
@@ -131,11 +155,9 @@ def get_tickets(token: Annotated[str | None, Header()] = None):
     conexion.close()
     return [dict(zip([desc[0] for desc in cursor.description], ticket)) for ticket in Ticket]
     
-    raise HTTPException(status_code=401, detail="Do't have a permissions to request")  
-    
 
 # READ - GET by ID # Endpoint para obtener un ticket por su ID
-@app.get('/ticket/{ticket_id}', response_model=Ticket, tags=["Ticket"])
+@app.get('/ticket/{ticket_id}', response_model=Ticket, tags=["Tickets"])
 def get_ticket(ticket_id: int):
     conexion = conectar_bd()
     cursor = conexion.cursor()
@@ -154,8 +176,8 @@ def get_ticket(ticket_id: int):
 
 
 # UPDATE - PUT # Endpoint para actualizar un ticket
-@app.put('/ticket/{ticket_id}', response_model=Ticket, tags=["Ticket"])
-def update_ticket(ticket_id: int, ticket: Ticket):
+@app.put('/ticket/{ticket_id}', response_model=Ticket, tags=["Tickets"])
+def update_ticket(ticket_id: int, ticket: Ticket, payload: dict = Depends(verificar_rol(["admin"]))):
     conexion = conectar_bd()
     cursor = conexion.cursor()
 
@@ -178,10 +200,9 @@ def update_ticket(ticket_id: int, ticket: Ticket):
 
     return dict(zip([desc[0] for desc in cursor.description], update_ticket))
 
-
 # DELETE - DELETE # Endpoint para eliminar un ticket
-@app.delete('/ticket/{ticket_id}', response_model=dict, tags=["Ticket"])
-def deleted_ticket(ticket_id: int):
+@app.delete('/ticket/{ticket_id}', response_model=dict, tags=["Tickets"])
+def deleted_ticket(ticket_id: int, payload: dict = Depends(verificar_rol(["admin"]))):
     conexion = conectar_bd()
     cursor = conexion.cursor()
 
@@ -195,3 +216,30 @@ def deleted_ticket(ticket_id: int):
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     return {"message": "Ticket deleted successfully", "id": deleted_ticket[0]}
+
+@app.put("/ticket/solution/{id}", response_model=TicketSolution, tags=["Tickets"])
+def ticket_solution(id: int, ticket: TicketSolutionUpdate, payload: dict = Depends(verificar_rol(["admin"]))):
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    query = """
+    UPDATE tickets
+    SET tech_id = %s, status = %s, priority = %s, title_solution = %s, date_solution = %s, tech_description = %s, category = %s,
+    updated_at = NOW()
+    WHERE id = %s 
+    RETURNING *;
+    """
+
+    cursor.execute(query, (
+        ticket.tech_id, ticket.status, ticket.priority, ticket.title_solution, ticket.date_solution, ticket.tech_description, ticket.category, id
+        ))
+    updated_ticket = cursor.fetchone()
+    conexion.commit()
+    cursor.close()
+    conexion.close()
+
+    if updated_ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    return dict(zip([desc[0] for desc in cursor.description], updated_ticket))
+
