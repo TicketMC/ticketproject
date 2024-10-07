@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
 from auth import router, SECRET_KEY, ALGORITHM
+from users import profile_router
 from jose import jwt
 from enum import Enum
 from dotenv import load_dotenv
@@ -18,6 +19,7 @@ load_dotenv()
 app = FastAPI()
 # Incluir el router de autenticación definido en auth.py
 app.include_router(router)
+app.include_router(profile_router)
 
 # Permitir CORS para todas las orígenes (*)
 origins = ["*"]

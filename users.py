@@ -1,12 +1,14 @@
+from datetime import datetime
 import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 import psycopg2
 from pydantic import BaseModel
 from auth import User, UserCreate, conectar_bd, get_current_user, get_password_hash
-from main import Status
+
 
 router = APIRouter()
+profile_router = APIRouter()
 
 # Conexión a la base de datos PostgreSQL
 DATABASE_URL = os.getenv('PG_APIKEY')
@@ -21,79 +23,80 @@ def conectar_bd():
 def cerrar_bd(conexion):
     conexion.close()
 
-# Modelo Pydantic para actualizar usuarios
-class UserUpdate(BaseModel):
-    email: str
-    password: str
-    is_active: bool
+#-------------------------------PROFILES---------------------------->
+""""CREATE TABLE profiles (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id),
+    name VARCHAR(50),
+    lastname VARCHAR(50),
+    cellphone VARCHAR(15),
+    created TIMESTAMP DEFAULT NOW(),
+    updated TIMESTAMP DEFAULT NOW()
+);"""
 
-# Obtener todos los usuarios (Solo Admin)
-@router.get('/users/', response_model=List[User])
-def get_all_users(current_user: User = Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=Status.HTTP_403_FORBIDDEN, detail="Not authorized")
+class ProfileCreate(BaseModel):
+    user_id: int
+    name: str
+    lastname: str
+    cellphone: str
 
+class Profile(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    lastname: str
+    cellphone: str
+    created: datetime
+    updated: datetime
+    
+@profile_router.post("/profiles/", response_model=Profile, tags=["profiles"])
+def create_profile(profile: ProfileCreate):
     conexion = conectar_bd()
     cursor = conexion.cursor()
-    cursor.execute("SELECT id, email, role, is_active FROM users")
-    users = cursor.fetchall()
-    cerrar_bd(conexion)
-
-    return [{"id": u[0], "email": u[1], "role": u[2], "is_active": u[3]} for u in users]
-
-# Obtener un usuario por ID (Admin o el mismo usuario)
-@router.get('/users/{user_id}', response_model=User)
-def get_user(user_id: int, current_user: User = Depends(get_current_user)):
-    if current_user["role"] != "admin" and current_user["id"] != user_id:
-        raise HTTPException(status_code=Status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
-    cursor.execute("SELECT id, email, role, is_active FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
-    cerrar_bd(conexion)
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {"id": user[0], "email": user[1], "role": user[2], "is_active": user[3]}
-
-# Actualizar un usuario (Admin o el mismo usuario)
-@router.put('/users/{user_id}', response_model=User)
-def update_user(user_id: int, user: UserUpdate, current_user: User = Depends(get_current_user)):
-    if current_user["role"] != "admin" and current_user["id"] != user_id:
-        raise HTTPException(status_code=Status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
-    hashed_password = get_password_hash(user.password)
-    cursor.execute("""
-        UPDATE users SET email = %s, password = %s, is_active = %s WHERE id = %s RETURNING id, email, role, is_active;
-    """, (user.email, hashed_password, user.is_active, user_id))
-    updated_user = cursor.fetchone()
+    query = """
+    INSERT INTO profiles (user_id, name, lastname, cellphone, created, updated)
+    VALUES (%s, %s, %s, %s, NOW(), NOW()) RETURNING *;
+    """
+    cursor.execute(query, (profile.user_id, profile.name, profile.lastname, profile.cellphone))
+    new_profile = cursor.fetchone()
     conexion.commit()
-    cerrar_bd(conexion)
+    cursor.close()
+    conexion.close()
+    return dict(zip([desc[0] for desc in cursor.description], new_profile))
 
-    if updated_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {"id": updated_user[0], "email": updated_user[1], "role": updated_user[2], "is_active": updated_user[3]}
-
-# Eliminar un usuario (Solo Admin)
-@router.delete('/users/{user_id}', response_model=dict)
-def delete_user(user_id: int, current_user: User = Depends(get_current_user)):
-    if current_user["role"] != "admin":
-        raise HTTPException(status_code=Status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
+@profile_router.get("/profiles/{user_id}", response_model=Profile, tags=["profiles"])
+def get_profile(user_id: int):
     conexion = conectar_bd()
     cursor = conexion.cursor()
-    cursor.execute("DELETE FROM users WHERE id = %s RETURNING id;", (user_id,))
-    deleted_user = cursor.fetchone()
+    query = "SELECT * FROM profiles WHERE user_id = %s;"
+    cursor.execute(query, (user_id,))
+    profile = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    return dict(zip([desc[0] for desc in cursor.description], profile))
+
+@profile_router.put("/profiles/{user_id}", response_model=Profile, tags=["profiles"])
+def update_profile(user_id: int, profile: ProfileCreate):
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+    query = """
+    UPDATE profiles
+    SET name = %s, lastname = %s, cellphone = %s, updated = NOW()
+    WHERE user_id = %s RETURNING *;
+    """
+    cursor.execute(query, (profile.name, profile.lastname, profile.cellphone, user_id))
+    updated_profile = cursor.fetchone()
     conexion.commit()
-    cerrar_bd(conexion)
+    cursor.close()
+    conexion.close()
 
-    if deleted_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    if updated_profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    return dict(zip([desc[0] for desc in cursor.description], updated_profile))
 
-    return {"message": "User deleted successfully", "id": deleted_user[0]}
-
+#-------------------------------PROFILES---------------------------->
