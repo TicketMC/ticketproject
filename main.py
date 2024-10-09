@@ -242,4 +242,3 @@ def ticket_solution(id: int, ticket: TicketSolutionUpdate, payload: dict = Depen
         raise HTTPException(status_code=404, detail="Ticket not found")
     
     return dict(zip([desc[0] for desc in cursor.description], updated_ticket))
-
