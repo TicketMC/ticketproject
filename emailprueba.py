@@ -19,14 +19,35 @@ server.starttls()
 server.ehlo()
 server.login(sender_email, sender_password)
 
-def send_email(person: str, myemail: str, subject: str, message: str, finalms: str):
+def send_email_admin(person: str, myemail: str, subject: str, message: str, finalms: str):
   with open("email.html", "r") as file:
     template_str = file.read()
 
   jinja_template = Template(template_str)
   
   email_data = {
-      "greeting": f"Hello {person}!",
+      "greeting": f"Hola {person}!",
+      "message": message,
+      "finalms": finalms
+  }
+  email_content = jinja_template.render(email_data)
+  msg = MIMEMultipart()
+  msg["From"] = "ticketmc.sena@gmail.com"
+  msg["To"] = myemail
+  msg["Subject"] = subject
+  msg.attach(MIMEText(email_content, "html"))
+
+  server.sendmail(sender_email, myemail, msg.as_string())
+  server.quit()
+  
+def send_email_user(person: str, myemail: str, subject: str, message: str, finalms: str):
+  with open("email.html", "r") as file:
+    template_str = file.read()
+
+  jinja_template = Template(template_str)
+  
+  email_data = {
+      "greeting": f"Hola {person}!",
       "message": message,
       "finalms": finalms
   }

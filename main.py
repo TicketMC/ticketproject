@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
 from auth import router, SECRET_KEY, ALGORITHM, verificar_rol
+from emailprueba import send_email_admin, send_email_user
 from users import profile_router
 from jose import jwt
 from enum import Enum
@@ -123,6 +124,7 @@ def create_ticket(ticket: Ticket_create, payload: dict = Depends(verificar_rol([
     ))
     new_ticket = cursor.fetchone()
     conexion.commit()
+    send_email_admin("Horacio", "admin@gmail.com", "Horacio", "Un usuario ha creado un nuevo ticket", "Gracias por la atencion, buen dia")
     cursor.close()
     conexion.close()
     return dict(zip([desc[0] for desc in cursor.description], new_ticket))
@@ -192,6 +194,7 @@ def update_ticket(ticket_id: int, ticket: Ticket, payload: dict = Depends(verifi
     ))
     update_ticket = cursor.fetchone()
     conexion.commit()
+    send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia")
     cursor.close()
     conexion.close()
 
