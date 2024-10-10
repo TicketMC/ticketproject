@@ -37,8 +37,7 @@ class Rol (str, Enum):
 class Profile(BaseModel):
     id: int
     email: str
-    names: str
-    lastnames: str
+    fullname: str
     rol: Rol
     phone: str
     created_at: datetime
