@@ -55,6 +55,7 @@ class Ticket_create(BaseModel):
     description: str = Field(min_length=1)
     status: Status
     priority: Priority
+    category: str
 
 class TicketSolution(BaseModel):
     id: int
@@ -67,8 +68,6 @@ class TicketSolution(BaseModel):
     title_solution: str
     date_solution: datetime
     tech_description: str
-    category: str
-    
     
 class TicketSolutionUpdate(BaseModel):
     id: int
@@ -78,7 +77,6 @@ class TicketSolutionUpdate(BaseModel):
     title_solution: str
     date_solution: datetime
     tech_description: str
-    category: str
 
 # Modelo Pydantic para la respuesta de tickets con y sin solución
 class TicketSolutionCount(BaseModel):
@@ -148,11 +146,11 @@ def create_ticket(ticket: Ticket_create, token: Annotated[str | None, Header()] 
         )
     
     query = """
-    INSERT INTO tickets (user_id, title, description, status, priority, created_at, updated_at)
-    VALUES (%s, %s, %s, %s, %s, NOW(), NULL) RETURNING *;
+    INSERT INTO tickets (user_id, title, description, status, priority, category, created_at, updated_at)
+    VALUES (%s, %s, %s, %s, %s,%s, NOW(), NULL) RETURNING *;
     """
     cursor.execute(query, (
-        user_id, ticket.title, ticket.description, ticket.status, ticket.priority
+        user_id, ticket.title, ticket.description, ticket.status, ticket.priority, ticket.category
     ))
     new_ticket = cursor.fetchone()
     conexion.commit()
@@ -277,14 +275,14 @@ def ticket_solution(id: int, ticket: TicketSolutionUpdate, payload: dict = Depen
 
     query = """
     UPDATE tickets
-    SET tech_id = %s, status = %s, priority = %s, title_solution = %s, date_solution = %s, tech_description = %s, category = %s,
+    SET tech_id = %s, status = %s, priority = %s, title_solution = %s, date_solution = %s, tech_description = %s,
     updated_at = NOW()
     WHERE id = %s 
     RETURNING *;
     """
 
     cursor.execute(query, (
-        ticket.tech_id, ticket.status, ticket.priority, ticket.title_solution, ticket.date_solution, ticket.tech_description, ticket.category, id
+        ticket.tech_id, ticket.status, ticket.priority, ticket.title_solution, ticket.date_solution, ticket.tech_description, id
         ))
     updated_ticket = cursor.fetchone()
     conexion.commit()
