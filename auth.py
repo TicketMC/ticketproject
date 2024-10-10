@@ -203,16 +203,27 @@ def verificar_rol(roles_permitidos: list):
         try:
             # Decodificar el token JWT
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            rol = payload.get("rol")
+            rol = payload.get("rol").lower()  # Asegúrate de que el rol esté en minúsculas
+            user_id = payload.get("id")  # Cambiar 'user_id' por 'id' si es necesario
 
-            if rol not in roles_permitidos:
+            # Depuración: Imprimir el rol para asegurar que se está leyendo correctamente
+            print(f"Rol en el token: {rol}")
+
+            # Convertir los roles permitidos a minúsculas también
+            if rol not in [r.lower() for r in roles_permitidos]:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="No tienes permiso para acceder a este recurso"
                 )
 
-            return payload  # Retornamos el payload para reutilizarlo si es necesario (ej. obtener el user_id)
-        
+            if user_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="El token no contiene un user_id válido"
+                )
+
+            return payload
+
         except jwt.JWTError:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -220,3 +231,5 @@ def verificar_rol(roles_permitidos: list):
             )
     
     return rol_dependency
+
+

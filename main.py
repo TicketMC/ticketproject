@@ -52,8 +52,6 @@ class Priority(str, Enum):
 
 # Modelo de entrada para crear un ticket con validaciones en los campos
 class Ticket_create(BaseModel):
-    ticket_id: int
-    user_id: int
     title: str = Field(min_length=5, max_length=25)
     description: str = Field(min_length=5, max_length=50)
     status: Status
@@ -115,19 +113,28 @@ def cerrar_bd(conexion):
 def create_ticket(ticket: Ticket_create, payload: dict = Depends(verificar_rol(["user"]))):
     conexion = conectar_bd()
     cursor = conexion.cursor()
+
+    # Obtenemos el `user_id` del token del payload.
+    user_id = payload['id']
+
     query = """
     INSERT INTO tickets (user_id, title, description, status, priority, created_at, updated_at)
     VALUES (%s, %s, %s, %s, %s, NOW(), NOW()) RETURNING *;
     """
     cursor.execute(query, (
-        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.priority
+        user_id, ticket.title, ticket.description, ticket.status, ticket.priority
     ))
     new_ticket = cursor.fetchone()
     conexion.commit()
-    send_email_admin("Horacio", "admin@gmail.com", "Horacio", "Un usuario ha creado un nuevo ticket", "Gracias por la atencion, buen dia")
+
+    # Enviar notificación al administrador.
+    send_email_admin("Horacio", "admin@gmail.com", "Horacio", "Un usuario ha creado un nuevo ticket.", "Gracias por la atencion, buen dia.")
+
     cursor.close()
     conexion.close()
+
     return dict(zip([desc[0] for desc in cursor.description], new_ticket))
+
 
 
 # doc, url, sql, front
@@ -194,7 +201,7 @@ def update_ticket(ticket_id: int, ticket: Ticket, payload: dict = Depends(verifi
     ))
     update_ticket = cursor.fetchone()
     conexion.commit()
-    send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia")
+    send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia.")
     cursor.close()
     conexion.close()
 
