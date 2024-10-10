@@ -124,15 +124,15 @@ def get_profile(id: int, token: Annotated[str | None, Header()] = None):
 
 
 @profile_router.put("/profiles/{id}", response_model=Profile, tags=["Profiles"])
-def update_profile(id: int, profile: ProfileUpdate):
+def update_profile(id: int, profile: ProfileUpdate, token: Annotated[str | None, Header()] = None):
     conexion = conectar_bd()
     cursor = conexion.cursor()
     query = """
     UPDATE users
-    SET names = %s, lastnames = %s, phone = %s, updated_at = NOW()
+    SET fullname = %s, phone = %s, updated_at = NOW()
     WHERE id = %s RETURNING *;
     """
-    cursor.execute(query, (profile.names, profile.lastnames, profile.phone, id))
+    cursor.execute(query, (profile.fullname, profile.phone, id))
     updated_profile = cursor.fetchone()
     conexion.commit()
     cursor.close()

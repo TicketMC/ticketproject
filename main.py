@@ -4,11 +4,11 @@ from fastapi.responses import HTMLResponse
 from typing import Annotated, List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import date, datetime
 from auth import router, SECRET_KEY, ALGORITHM, verificar_rol
 from emailprueba import send_email_admin, send_email_user
 from users import profile_router
-from jose import jwt
+from jose import JWTError, jwt
 from enum import Enum
 from dotenv import load_dotenv
 import psycopg2
@@ -93,6 +93,14 @@ class TicketCountPerUser(BaseModel):
 class TicketStatistics(BaseModel):
     ticket_solution_count: TicketSolutionCount
     tickets_per_user: List[TicketCountPerUser]
+    
+class TicketResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    status: str
+    priority: str
+    date_solution: date
 
 """
 CREATE TABLE tickets (
@@ -330,3 +338,56 @@ def get_ticket_statistics():
         "ticket_solution_count": ticket_solution_count,
         "tickets_per_user": tickets_per_user
     }
+    
+@app.get("/users/{user_id}/solved-tickets", response_model=List[TicketResponse], tags=["Tickets"])
+def get_solved_tickets(
+    user_id: int, 
+    token: str = Header(None)
+):
+    # Verificar si el token fue proporcionado
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticación no proporcionado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Decodificar el token JWT para obtener el user_id
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_user_id: int = payload.get("id")
+        if token_user_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+    
+    # Verificar que el user_id en la ruta coincida con el del token
+    if user_id != token_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permiso para consultar estos tickets")
+
+    # Conectar a la base de datos y obtener los tickets resueltos del usuario
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    # Consulta SQL para obtener los tickets del usuario con una solución proporcionada
+    query = """
+    SELECT id, title, description, date_solution, status, priority
+    FROM tickets
+    WHERE user_id = %s AND date_solution IS NOT NULL;
+    """
+    cursor.execute(query, (user_id,))
+    result = cursor.fetchall()
+
+    cursor.close()
+    conexion.close()
+
+    # Formatear el resultado en una lista de diccionarios
+    tickets = [
+        {"id": row[0], "title": row[1], "description": row[2], "date_solution": row[3], "status": row[4], "priority": row[5]}
+        for row in result
+    ]
+
+    if not tickets:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No se encontraron tickets resueltos")
+
+    return tickets
