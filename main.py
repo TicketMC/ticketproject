@@ -1,7 +1,7 @@
 # Importar dependencias
 from fastapi import Depends, FastAPI, HTTPException, Header, status
 from fastapi.responses import HTMLResponse
-from typing import Annotated
+from typing import Annotated, List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -79,6 +79,20 @@ class TicketSolutionUpdate(BaseModel):
     date_solution: datetime
     tech_description: str
     category: str
+
+# Modelo Pydantic para la respuesta de tickets con y sin solución
+class TicketSolutionCount(BaseModel):
+    null_tickets: int
+    not_null_tickets: int
+
+# Modelo Pydantic para la respuesta de la cantidad de tickets por usuario
+class TicketCountPerUser(BaseModel):
+    user_id: int
+    ticket_count: int
+    
+class TicketStatistics(BaseModel):
+    ticket_solution_count: TicketSolutionCount
+    tickets_per_user: List[TicketCountPerUser]
 
 """
 CREATE TABLE tickets (
@@ -273,3 +287,46 @@ def ticket_solution(id: int, ticket: TicketSolutionUpdate, payload: dict = Depen
         raise HTTPException(status_code=404, detail="Ticket not found")
     
     return dict(zip([desc[0] for desc in cursor.description], updated_ticket))
+
+@app.get("/ticket-statistics", response_model=TicketStatistics, tags=["Tickets"])
+def get_ticket_statistics():
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    # Ejecutar la primera consulta (tickets con y sin solución)
+    query1 = """
+    SELECT
+        COUNT(CASE WHEN date_solution IS NULL THEN 1 END) AS null_tickets,
+        COUNT(CASE WHEN date_solution IS NOT NULL THEN 1 END) AS not_null_tickets
+    FROM tickets;
+    """
+    cursor.execute(query1)
+    result1 = cursor.fetchone()
+
+    # Ejecutar la segunda consulta (cantidad de tickets por usuario)
+    query2 = """
+    SELECT user_id, COUNT(*) AS ticket_count
+    FROM tickets
+    GROUP BY user_id;
+    """
+    cursor.execute(query2)
+    result2 = cursor.fetchall()
+
+    cursor.close()
+    conexion.close()
+
+    # Procesar los resultados
+    ticket_solution_count = {
+        "null_tickets": result1[0],
+        "not_null_tickets": result1[1]
+    }
+
+    tickets_per_user = [
+        {"user_id": row[0], "ticket_count": row[1]} for row in result2
+    ]
+
+    # Retornar la respuesta combinada
+    return {
+        "ticket_solution_count": ticket_solution_count,
+        "tickets_per_user": tickets_per_user
+    }
