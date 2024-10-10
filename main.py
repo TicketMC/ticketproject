@@ -42,7 +42,6 @@ class Ticket(BaseModel):
 # Enums para definir los valores permitidos en los campos de tickets
 class Status(str, Enum):
     abierto = "abierto"
-    proceso = "proceso"
     cerrado = "cerrado"
 
 class Priority(str, Enum):
@@ -52,6 +51,7 @@ class Priority(str, Enum):
 
 # Modelo de entrada para crear un ticket con validaciones en los campos
 class Ticket_create(BaseModel):
+    user_id: int
     title: str = Field(min_length=5, max_length=25)
     description: str = Field(min_length=5, max_length=50)
     status: Status

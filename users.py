@@ -27,8 +27,7 @@ def cerrar_bd(conexion):
 
 class ProfileUpdate(BaseModel):
     id: int
-    names: str
-    lastnames: str
+    fullname: str
     phone: str
 
 class Rol (str, Enum):
