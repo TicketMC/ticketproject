@@ -51,14 +51,11 @@ class Priority(str, Enum):
 
 # Modelo de entrada para crear un ticket con validaciones en los campos
 class Ticket_create(BaseModel):
-    user_id: int
-    title: str = Field(min_length=5, max_length=25)
-    description: str = Field(min_length=5, max_length=50)
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
     status: Status
     priority: Priority
-    created_at: datetime = None
-    updated_at: datetime = None    
-    
+
 class TicketSolution(BaseModel):
     id: int
     tech_id: int
@@ -71,6 +68,7 @@ class TicketSolution(BaseModel):
     date_solution: datetime
     tech_description: str
     category: str
+    
     
 class TicketSolutionUpdate(BaseModel):
     id: int
@@ -110,16 +108,26 @@ def cerrar_bd(conexion):
 
 # ♣-♥-♦ CREATE - POST # Endpoint para crear un nuevo ticket
 @app.post('/ticket/', response_model=Ticket, tags=["Tickets"], description="Create a new ticket")
-def create_ticket(ticket: Ticket_create, payload: dict = Depends(verificar_rol(["user"]))):
+def create_ticket(ticket: Ticket_create, token: Annotated[str | None, Header()] = None):
     conexion = conectar_bd()
     cursor = conexion.cursor()
+    
+    # Decodificar el token JWT para obtener el rol del usuario
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    rol: str = payload.get("rol")
+    user_id: str = payload.get("id")
 
-    # Obtenemos el `user_id` del token del payload.
-    user_id = payload['id']
-
+    # 3 Verificar si el usuario existe    
+    if token is None and rol != "admin":
+            raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usted no se encuentra autorizado",
+            headers={"auth": "Bearer"}, # se contesta como consideres el error
+        )
+    
     query = """
     INSERT INTO tickets (user_id, title, description, status, priority, created_at, updated_at)
-    VALUES (%s, %s, %s, %s, %s, NOW(), NOW()) RETURNING *;
+    VALUES (%s, %s, %s, %s, %s, NOW(), NULL) RETURNING *;
     """
     cursor.execute(query, (
         user_id, ticket.title, ticket.description, ticket.status, ticket.priority
@@ -186,10 +194,23 @@ def get_ticket(ticket_id: int):
 
 # UPDATE - PUT # Endpoint para actualizar un ticket
 @app.put('/ticket/{ticket_id}', response_model=Ticket, tags=["Tickets"])
-def update_ticket(ticket_id: int, ticket: Ticket, payload: dict = Depends(verificar_rol(["admin"]))):
+def update_ticket(ticket_id: int, ticket: Ticket_create, token: Annotated[str | None, Header()] = None):
     conexion = conectar_bd()
     cursor = conexion.cursor()
 
+    # Decodificar el token JWT para obtener el rol del usuario
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    rol: str = payload.get("rol")
+    user_id: str = payload.get("id")
+
+    # 3 Verificar si el usuario existe    
+    if token is None and rol != "admin":
+            raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usted no se encuentra autorizado",
+            headers={"auth": "Bearer"}, # se contesta como consideres el error
+        )
+    
     query = """
     UPDATE tickets
     SET user_id = %s, title = %s, description = %s, status = %s, priority = %s, updated_at = NOW()
@@ -197,7 +218,7 @@ def update_ticket(ticket_id: int, ticket: Ticket, payload: dict = Depends(verifi
     """
 
     cursor.execute(query, (
-        ticket.user_id, ticket.title, ticket.description, ticket.status, ticket.priority, ticket_id
+        user_id, ticket.title, ticket.description, ticket.status, ticket.priority, ticket_id
     ))
     update_ticket = cursor.fetchone()
     conexion.commit()

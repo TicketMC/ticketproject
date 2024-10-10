@@ -1,5 +1,6 @@
 # Importar dependencias
 from enum import Enum
+import secrets
 import psycopg2
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Header, status
@@ -232,4 +233,58 @@ def verificar_rol(roles_permitidos: list):
     
     return rol_dependency
 
+class RecoverPassRequest(BaseModel):
+    email: str
 
+class ResetPassRequest(BaseModel):
+    token: str
+    password: str
+
+@router.post("/recover-password")
+def send_recover_token(recover_pass_request: RecoverPassRequest):
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    # Verificar si el email existe
+    cursor.execute("SELECT id FROM users WHERE email = %s", (recover_pass_request.email,))
+    user = cursor.fetchone()
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    # Generar un token de recuperación (puedes guardarlo en la base de datos si deseas)
+    recover_token = secrets.token_hex(16)
+
+    # Simular el envío del correo con el token (usa smtplib en producción)
+    print(f"Send token {recover_token} to {recover_pass_request.email}")
+    
+    # Actualizar token en la base de datos (podrías agregar una tabla para manejar tokens)
+    cursor.execute("UPDATE users SET recover_token = %s WHERE email = %s", (recover_token, recover_pass_request.email))
+    conexion.commit()
+
+    cursor.close()
+    conexion.close()
+
+    return {"msg": "Recovery token sent"}
+
+
+@router.put("/reset-password")
+def reset_password(reset_pass_request: ResetPassRequest):
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    # Buscar el usuario con el token proporcionado
+    cursor.execute("SELECT id FROM users WHERE recover_token = %s", (reset_pass_request.token,))
+    user = cursor.fetchone()
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    # Actualizar la contraseña
+    cursor.execute("UPDATE users SET password = %s, recover_token = NULL WHERE id = %s", (reset_pass_request.new, user[0]))
+    conexion.commit()
+
+    cursor.close()
+    conexion.close()
+
+    return {"msg": "Password reset successful"}
