@@ -193,6 +193,68 @@ def get_all_tickets(token: Annotated[str | None, Header()] = None):
     return [dict(zip([desc[0] for desc in cursor.description], ticket)) for ticket in Ticket]
     
 
+@app.get("/users/{user_id}/tickets-solutions", response_model=List[TicketSolution], tags=["Tickets"])
+def get_user_tickets_solutions(user_id: int, token: str = Header(None)):
+    # Verificar si el token fue proporcionado
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticación no proporcionado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Decodificar el token JWT para obtener el user_id
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_user_id: int = payload.get("id")
+        if token_user_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+    
+    # Verificar que el user_id en la ruta coincida con el del token
+    if user_id != token_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tiene permiso para consultar estos tickets")
+
+    # Conectar a la base de datos y obtener los tickets del usuario
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    # Consulta SQL para obtener los tickets del usuario con la información del modelo TicketSolution
+    query = """
+    SELECT id, tech_id, user_id, title, description, status, priority, title_solution, date_solution, tech_description
+    FROM tickets
+    WHERE user_id = %s AND date_solution IS NOT NULL;  -- Asegurarse de obtener solo tickets con solución
+    """
+    cursor.execute(query, (user_id,))
+    result = cursor.fetchall()
+
+    cursor.close()
+    conexion.close()
+
+    # Formatear el resultado en una lista de diccionarios
+    tickets_solutions = [
+        {
+            "id": row[0],
+            "tech_id": row[1],
+            "user_id": row[2],
+            "title": row[3],
+            "description": row[4],
+            "status": row[5],
+            "priority": row[6],
+            "title_solution": row[7],
+            "date_solution": row[8],
+            "tech_description": row[9],
+        }
+        for row in result
+    ]
+
+    if not tickets_solutions:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No se encontraron tickets resueltos para este usuario")
+
+    return tickets_solutions
+
+
 # READ - GET by ID # Endpoint para obtener un ticket por su ID
 @app.get('/ticket/{ticket_id}', response_model=Ticket, tags=["Tickets"])
 def get_ticket(ticket_id: int):
@@ -253,7 +315,7 @@ def update_ticket(ticket_id: int, ticket: Ticket_create, token: Annotated[str | 
 
 # DELETE - DELETE # Endpoint para eliminar un ticket
 @app.delete('/ticket/{ticket_id}', response_model=dict, tags=["Tickets"])
-def deleted_ticket(ticket_id: int, payload: dict = Depends(verificar_rol(["admin"]))):
+def deleted_ticket(ticket_id: int, payload: dict = Depends(verificar_rol(["user"]))):
     conexion = conectar_bd()
     cursor = conexion.cursor()
 
