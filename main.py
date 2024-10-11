@@ -156,7 +156,7 @@ def create_ticket(ticket: Ticket_create, token: Annotated[str | None, Header()] 
     conexion.commit()
 
     # Enviar notificación al administrador.
-    #send_email_admin("Horacio", "admin@gmail.com", "Horacio", "Un usuario ha creado un nuevo ticket.", "Gracias por la atencion, buen dia.")
+    send_email_admin("Horacio", "admin@gmail.com", "Horacio", "Un usuario ha creado un nuevo ticket.", "Gracias por la atencion, buen dia.")
 
     cursor.close()
     conexion.close()
@@ -304,7 +304,7 @@ def update_ticket(ticket_id: int, ticket: Ticket_create, token: Annotated[str | 
     ))
     update_ticket = cursor.fetchone()
     conexion.commit()
-    #send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia.")
+    send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia.")
     cursor.close()
     conexion.close()
 
@@ -348,6 +348,7 @@ def ticket_solution(id: int, ticket: TicketSolutionUpdate, payload: dict = Depen
         ))
     updated_ticket = cursor.fetchone()
     conexion.commit()
+    send_email_user("Gustavo", "usuario@gmail.com", "Gustavo", "Tu ticket a recibido una actualizacion.", "Gracias por la atencion, buen dia.")
     cursor.close()
     conexion.close()
 
